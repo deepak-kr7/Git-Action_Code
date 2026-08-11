@@ -1,5 +1,6 @@
 # ==============================================================================
 # Azure DevOps CI/CD Pipeline for Terraform Azure Infrastructure
+# Compatible with both Azure-Hosted Agents and Self-Hosted macOS/Linux Agents
 # ==============================================================================
 
 name: $(Build.DefinitionName)_$(Date:yyyyMMdd)$(Rev:.r)
@@ -25,7 +26,7 @@ variables:
   backendContainer: 'cicdcontainer'
   backendTfStateKey: 'terraform.tfstate'
   
-  # Terraform Version
+  # Terraform Version (Use official HashiCorp releases: 1.7.0, 1.8.0, 1.9.0)
   terraformVersion: '1.7.0'
 
 stages:
@@ -38,10 +39,10 @@ stages:
       - job: PlanJob
         displayName: 'Terraform Format, Init, Validate & Plan'
         pool:
-          vmImage: 'ubuntu-latest'
+          vmImage: 'ubuntu-latest' # Change to name of your Self-Hosted pool if using local agent
 
         steps:
-          # Step 1: Install Terraform CLI
+          # Step 1: Install Terraform CLI (Official Release)
           - task: TerraformInstaller@1
             displayName: 'Install Terraform $(terraformVersion)'
             inputs:
@@ -57,6 +58,9 @@ stages:
               addSpnToEnvironment: true
               inlineScript: |
                 set -e
+                echo "==> Checking Terraform Version..."
+                terraform --version
+
                 echo "==> Checking Terraform Format..."
                 terraform fmt -check
 
@@ -84,7 +88,7 @@ stages:
       - deployment: ApplyJob
         displayName: 'Terraform Apply to Azure'
         pool:
-          vmImage: 'ubuntu-latest'
+          vmImage: 'ubuntu-latest' # Change to name of your Self-Hosted pool if using local agent
         environment: 'production'
         strategy:
           runOnce:
@@ -93,7 +97,7 @@ stages:
                 # Step 1: Checkout Repository Code
                 - checkout: self
 
-                # Step 2: Install Terraform CLI
+                # Step 2: Install Terraform CLI (Official Release)
                 - task: TerraformInstaller@1
                   displayName: 'Install Terraform $(terraformVersion)'
                   inputs:
