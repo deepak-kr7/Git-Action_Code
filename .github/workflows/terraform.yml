@@ -36,6 +36,12 @@ jobs:
         with:
           terraform_version: 1.7.0
 
+      # Azure Login step (Supports single AZURE_CREDENTIALS secret OR individual secrets)
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
       - name: Terraform Format Check
         id: fmt
         run: terraform fmt -check
@@ -96,9 +102,17 @@ jobs:
         with:
           terraform_version: 1.7.0
 
+      # Azure Login step
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+
       - name: Terraform Init
         run: terraform init
 
       - name: Terraform Apply
         run: terraform apply -auto-approve
+
 
