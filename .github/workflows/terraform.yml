@@ -4,8 +4,8 @@ on:
   push:
     branches:
       - main
+      - 'feature/**'
       - feature
-
   pull_request:
     branches:
       - main
@@ -15,67 +15,83 @@ permissions:
 
 jobs:
   terraform:
-    name: Terraform Deployment
-    runs-on:
-      - self-hosted
-      - windows
-      - x64
+    name: Terraform CI/CD Workflow
+    runs-on: [self-hosted, macOS]
 
     defaults:
       run:
-        shell: powershell
+        shell: bash
         working-directory: .
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Check Azure CLI
+      - name: Check Environment & Tools
         run: |
-          Write-Host "AZURE CLI VERSION"
-          az version
-
-      - name: Check Azure Login
-        run: |
-          Write-Host "CURRENT WINDOWS USER"
-          whoami
-
-          Write-Host "AZURE ACCOUNT"
-          az account show --output table
-
-      - name: Check Terraform
-        run: |
-          Write-Host "TERRAFORM PATH"
-          where.exe terraform
-
-          Write-Host "TERRAFORM VERSION"
+          echo "===================================="
+          echo " Runner & macOS Environment Info"
+          echo "===================================="
+          echo "User: $(whoami)"
+          echo "OS: $(uname -a)"
+          echo "Working Dir: $(pwd)"
+          echo ""
+          echo "===================================="
+          echo " Tool Versions"
+          echo "===================================="
           terraform version
+          echo ""
+          if command -v az &> /dev/null; then
+            az version --output table
+          else
+            echo "Azure CLI not found in PATH"
+          fi
 
-      - name: Check Terraform Files
+      - name: Terraform Format Check
         run: |
-          Write-Host "CURRENT DIRECTORY"
-          Get-Location
-
-          Write-Host "TERRAFORM FILES"
-          Get-ChildItem -Path . -Filter *.tf
+          echo "===================================="
+          echo " Terraform Format Check"
+          echo "===================================="
+          terraform fmt -check -recursive
 
       - name: Terraform Init
         run: |
-          Write-Host "TERRAFORM INIT"
-          terraform init
+          echo "===================================="
+          echo " Terraform Init"
+          echo "===================================="
+          terraform init -input=false
 
       - name: Terraform Validate
         run: |
-          Write-Host "TERRAFORM VALIDATE"
+          echo "===================================="
+          echo " Terraform Validate"
+          echo "===================================="
           terraform validate
+
+      - name: Security Scan (Checkov)
+        run: |
+          echo "===================================="
+          echo " Security Scan with Checkov"
+          echo "===================================="
+          if command -v checkov &> /dev/null; then
+            checkov -d . --framework terraform --soft-fail
+          elif [ -f "$HOME/.local/bin/checkov" ]; then
+            $HOME/.local/bin/checkov -d . --framework terraform --soft-fail
+          else
+            echo "Checkov security scanner not found, skipping..."
+          fi
 
       - name: Terraform Plan
         run: |
-          Write-Host "TERRAFORM PLAN"
+          echo "===================================="
+          echo " Terraform Plan"
+          echo "===================================="
           terraform plan -no-color
 
       - name: Terraform Apply
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          Write-Host "TERRAFORM APPLY"
-          terraform apply -auto-approve
+          echo "===================================="
+          echo " Terraform Apply (Main Branch Only)"
+          echo "===================================="
+          terraform apply -input=false -auto-approve
