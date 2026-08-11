@@ -1,0 +1,120 @@
+# ==============================================================================
+# Azure DevOps CI/CD Pipeline for Terraform Azure Infrastructure
+# ==============================================================================
+
+name: $(Build.DefinitionName)_$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  branches:
+    include:
+      - main
+      - features
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  # Azure Service Connection Name (Configure in ADO Project Settings -> Service connections)
+  azureServiceConnection: 'azure-service-connection'
+  
+  # Azure Terraform Remote Backend Configuration
+  backendResourceGroup: 'cicd_test'
+  backendStorageAccount: 'storagecicd12'
+  backendContainer: 'cicdcontainer'
+  backendTfStateKey: 'terraform.tfstate'
+  
+  # Terraform Version
+  terraformVersion: '1.7.0'
+
+stages:
+  # ============================================================================
+  # Stage 1: Terraform Format Check, Validation & Execution Plan
+  # ============================================================================
+  - stage: Validate_and_Plan
+    displayName: 'Terraform Validate & Plan'
+    jobs:
+      - job: PlanJob
+        displayName: 'Terraform Format, Init, Validate & Plan'
+        pool:
+          vmImage: 'ubuntu-latest'
+
+        steps:
+          # Step 1: Install Terraform CLI
+          - task: TerraformInstaller@1
+            displayName: 'Install Terraform $(terraformVersion)'
+            inputs:
+              terraformVersion: '$(terraformVersion)'
+
+          # Step 2: Terraform Init, Format Check, Validate & Plan via Azure CLI
+          - task: AzureCLI@2
+            displayName: 'Run Terraform Init, Validate & Plan'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              addSpnToEnvironment: true
+              inlineScript: |
+                set -e
+                echo "==> Checking Terraform Format..."
+                terraform fmt -check
+
+                echo "==> Initializing Terraform Backend..."
+                terraform init \
+                  -backend-config="resource_group_name=$(backendResourceGroup)" \
+                  -backend-config="storage_account_name=$(backendStorageAccount)" \
+                  -backend-config="container_name=$(backendContainer)" \
+                  -backend-config="key=$(backendTfStateKey)"
+
+                echo "==> Validating Terraform Configuration..."
+                terraform validate
+
+                echo "==> Generating Terraform Execution Plan..."
+                terraform plan -out=tfplan
+
+  # ============================================================================
+  # Stage 2: Terraform Apply (Executes only when merged to main branch)
+  # ============================================================================
+  - stage: Apply
+    displayName: 'Terraform Apply (Post Merge)'
+    dependsOn: Validate_and_Plan
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: ApplyJob
+        displayName: 'Terraform Apply to Azure'
+        pool:
+          vmImage: 'ubuntu-latest'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Step 1: Checkout Repository Code
+                - checkout: self
+
+                # Step 2: Install Terraform CLI
+                - task: TerraformInstaller@1
+                  displayName: 'Install Terraform $(terraformVersion)'
+                  inputs:
+                    terraformVersion: '$(terraformVersion)'
+
+                # Step 3: Terraform Init & Apply via Azure CLI
+                - task: AzureCLI@2
+                  displayName: 'Run Terraform Init & Apply'
+                  inputs:
+                    azureSubscription: '$(azureServiceConnection)'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    addSpnToEnvironment: true
+                    inlineScript: |
+                      set -e
+                      echo "==> Initializing Terraform Backend..."
+                      terraform init \
+                        -backend-config="resource_group_name=$(backendResourceGroup)" \
+                        -backend-config="storage_account_name=$(backendStorageAccount)" \
+                        -backend-config="container_name=$(backendContainer)" \
+                        -backend-config="key=$(backendTfStateKey)"
+
+                      echo "==> Applying Terraform Infrastructure Changes..."
+                      terraform apply -auto-approve
