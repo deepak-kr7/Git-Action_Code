@@ -1,5 +1,5 @@
 # ==============================================================================
-# 0. Random String Generator (3 Character Prefix for Storage Account)
+# 0. Random String Generator (3 Character Suffix for Storage Account)
 # ==============================================================================
 resource "random_string" "random" {
   length  = 3
@@ -24,7 +24,7 @@ resource "azurerm_resource_group" "rg" {
 # 2. Storage Account Creation
 # ==============================================================================
 resource "azurerm_storage_account" "storage" {
-  name                     = "${random_string.random.result}${var.storage_account_name}"
+  name                     = "${var.storage_account_name}${random_string.random.result}"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
   account_tier             = "Standard"
