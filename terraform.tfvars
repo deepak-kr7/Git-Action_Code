@@ -1,5 +1,5 @@
 location              = "East US"
-resource_group_name   = "rg-demo21"
+resource_group_name   = "rg-deep2"
 storage_account_name  = "stgdemo2" # Ise apne according unique name se change karein
 vnet_name             = "vnet-demo"
 vnet_address_space    = ["10.0.0.0/16"]
