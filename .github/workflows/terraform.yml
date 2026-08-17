@@ -16,8 +16,11 @@ permissions:
   pull-requests: write
 
 jobs:
-  terraform:
-    name: Terraform CI/CD Workflow
+  # ============================================================================
+  # STAGE 1: Terraform Format, Init, Validate, and Plan
+  # ============================================================================
+  terraform-plan:
+    name: "Stage 1: Terraform Plan (Validation & Preview)"
     runs-on: [self-hosted, macOS]
 
     defaults:
@@ -32,21 +35,14 @@ jobs:
       - name: Check Environment & Tools
         run: |
           echo "===================================="
-          echo " Runner & macOS Environment Info"
+          echo " Stage 1: Runner & Tool Info"
           echo "===================================="
           echo "User: $(whoami)"
           echo "OS: $(uname -a)"
           echo "Working Dir: $(pwd)"
-          echo ""
-          echo "===================================="
-          echo " Tool Versions"
-          echo "===================================="
           terraform version
-          echo ""
           if command -v az &> /dev/null; then
             az version --output table
-          else
-            echo "Azure CLI not found in PATH"
           fi
 
       - name: Terraform Format Check
@@ -90,8 +86,25 @@ jobs:
           echo "===================================="
           terraform plan -no-color
 
+  # ============================================================================
+  # STAGE 2: Create Open Pull Request for Manual Review
+  # ============================================================================
+  create-pr:
+    name: "Stage 2: Open Pull Request for Review"
+    needs: terraform-plan
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    runs-on: [self-hosted, macOS]
+
+    defaults:
+      run:
+        shell: bash --noprofile --norc -e -o pipefail "{0}"
+        working-directory: .
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Create Automatic Pull Request
-        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -99,26 +112,50 @@ jobs:
           base: main
           title: "Automated PR: Merge ${{ github.ref_name }} into main"
           body: |
-            ## 🚀 Automated Pull Request
-            This PR was automatically raised by GitHub Actions after `terraform plan` succeeded on `${{ github.ref_name }}`.
+            ## 🚀 Stage 2: Pull Request for Manual Review
+            `Stage 1 (Terraform Plan)` succeeded on `${{ github.ref_name }}`.
 
-            ### Next Action:
-            - Review the changes.
-            - Click **Merge pull request** to trigger `terraform apply` on `main`.
+            ### 📋 Action Required by Reviewer:
+            1. Review the Terraform Plan output above.
+            2. Approve & Click **Merge pull request** to trigger **Stage 3 (Terraform Apply)** on `main`.
 
-      - name: PR Merge Instructions Notice
-        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+      - name: PR Notice for User
         run: |
           echo "=================================================================="
-          echo " ✅ Terraform Plan completed successfully on branch: ${{ github.ref_name }}"
-          echo " 📌 Automatic PR has been created/updated for '${{ github.ref_name }}' into 'main'."
-          echo " 🚀 Merge PR to trigger 'Terraform Apply' automatically on main."
+          echo " ✅ Stage 1 (Terraform Plan) Passed!"
+          echo " 📌 Stage 2: Pull Request is open for branch '${{ github.ref_name }}'."
+          echo " 🛑 MANUAL APPROVAL REQUIRED: Please review and click MERGE on GitHub."
+          echo " 🚀 Stage 3 (Terraform Apply) will run automatically after merge."
           echo "=================================================================="
 
-      - name: Terraform Apply
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  # ============================================================================
+  # STAGE 3: Terraform Apply (Runs ONLY after Manual PR Merge to Main)
+  # ============================================================================
+  terraform-apply:
+    name: "Stage 3: Terraform Apply (Main Branch Post-Merge)"
+    needs: terraform-plan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macOS]
+
+    defaults:
+      run:
+        shell: bash --noprofile --norc -e -o pipefail "{0}"
+        working-directory: .
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Terraform Init
         run: |
           echo "===================================="
-          echo " Terraform Apply (Main Branch Only)"
+          echo " Stage 3: Terraform Init (Main)"
+          echo "===================================="
+          terraform init -input=false
+
+      - name: Terraform Apply
+        run: |
+          echo "===================================="
+          echo " Stage 3: Terraform Apply (Main)"
           echo "===================================="
           terraform apply -input=false -auto-approve
