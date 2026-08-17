@@ -4,16 +4,19 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
+      version = "~> 5.0"
+    }
+    random = {
+      source  = "hashicorp/random"
       version = "~> 3.0"
     }
   }
 
   # Azure Remote Backend Configuration for Terraform State (.tfstate)
-  # Pipeline chalane se pehle Azure me ye Resource Group, Storage Account aur Container bane hone chahiye.
   backend "azurerm" {
-    resource_group_name  = "cicd_test"
-    storage_account_name = "storagecicd12" # Global unique storage account name for state
-    container_name       = "cicdcontainer"
+    resource_group_name  = "test_RG"
+    storage_account_name = "teststodeep111"
+    container_name       = "testcontainer111"
     key                  = "terraform.tfstate"
   }
 }
@@ -21,3 +24,5 @@ terraform {
 provider "azurerm" {
   features {}
 }
+
+provider "random" {}

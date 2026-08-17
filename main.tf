@@ -1,4 +1,13 @@
 # ==============================================================================
+# 0. Random String Generator (3 Character Prefix for Storage Account)
+# ==============================================================================
+resource "random_string" "random" {
+  length  = 3
+  special = false
+  upper   = false
+}
+
+# ==============================================================================
 # 1. Resource Group Creation
 # ==============================================================================
 resource "azurerm_resource_group" "rg" {
@@ -15,7 +24,7 @@ resource "azurerm_resource_group" "rg" {
 # 2. Storage Account Creation
 # ==============================================================================
 resource "azurerm_storage_account" "storage" {
-  name                     = var.storage_account_name
+  name                     = "${random_string.random.result}${var.storage_account_name}"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
   account_tier             = "Standard"
@@ -25,6 +34,11 @@ resource "azurerm_storage_account" "storage" {
     Environment = var.environment
     ManagedBy   = "Terraform"
   }
+
+  depends_on = [
+    azurerm_resource_group.rg,
+    random_string.random
+  ]
 }
 
 # ==============================================================================
@@ -40,6 +54,10 @@ resource "azurerm_virtual_network" "vnet" {
     Environment = var.environment
     ManagedBy   = "Terraform"
   }
+
+  depends_on = [
+    azurerm_resource_group.rg
+  ]
 }
 
 # Subnet inside Virtual Network
@@ -48,4 +66,9 @@ resource "azurerm_subnet" "subnet" {
   resource_group_name  = azurerm_resource_group.rg.name
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = var.subnet_address_prefix
+
+  depends_on = [
+    azurerm_virtual_network.vnet,
+    azurerm_resource_group.rg
+  ]
 }
