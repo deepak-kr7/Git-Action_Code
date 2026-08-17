@@ -1,6 +1,6 @@
-# Azure Terraform Setup with GitHub Actions Pipeline
+# Azure Terraform Setup with Azure DevOps (ADO) Pipeline
 
-Ye repository ek complete starter setup hai jisme Terraform ke zariye Azure me **Resource Group**, **Storage Account**, aur **Virtual Network (VNet)** create hota hai, aur state file ko Azure Blob Storage me secure backend ke tor par maintain kiya jata hai.
+Ye repository ek complete starter setup hai jisme Terraform ke zariye Azure me **Resource Group**, **Storage Account**, aur **Virtual Network (VNet)** create hota hai, aur state file ko Azure Blob Storage me secure backend ke tor par maintain kiya jata hai using **Azure DevOps Pipelines**.
 
 ---
 
@@ -11,11 +11,11 @@ Ye repository ek complete starter setup hai jisme Terraform ke zariye Azure me *
 - **`variables.tf`**: Variables ki declarations.
 - **`terraform.tfvars`**: Variables ki values.
 - **`outputs.tf`**: Resources ki output details (Name, ID, etc.).
-- **`.github/workflows/terraform.yml`**: GitHub Actions CI/CD Pipeline configuration file.
+- **`azure-pipelines.yml`**: Azure DevOps CI/CD Pipeline configuration file.
 
 ---
 
-## 🚀 Setup Steps (Step-by-Step Guide)
+## 🚀 Setup Steps (Step-by-Step Guide for Azure DevOps)
 
 ### 1️⃣ Azure Remote Backend Storage Account Banao (One-Time Setup)
 Terraform State (`.tfstate`) file ko manage karne ke liye Azure me pehle se ek Storage Account hona zaruri hai.
@@ -23,77 +23,46 @@ Azure CLI ya Portal se ye command chala kar backend create karein:
 
 ```bash
 # 1. Resource Group create karein
-az group create --name tfstate-rg --location eastus
+az group create --name cicd_test --location eastus
 
 # 2. Storage Account create karein (Small letters aur numbers, global unique name)
-az storage account create --name tfstateacct12345 --resource-group tfstate-rg --sku Standard_LRS
+az storage account create --name storagecicd12 --resource-group cicd_test --sku Standard_LRS
 
 # 3. Blob Container create karein
-az storage container create --name tfstate --account-name tfstateacct12345
+az storage container create --name cicdcontainer --account-name storagecicd12
 ```
-
-> **Note**: Agar aapne alag naam rakha hai toh `providers.tf` me `storage_account_name` aur `resource_group_name` update kar dein.
 
 ---
 
-### 2️⃣ Azure Service Principal Banao (GitHub Authentication ke liye)
-GitHub Actions ko Azure me deployment ke permission dene ke liye Azure Service Principal banayein:
+### 2️⃣ Azure DevOps Service Connection Setup
+Azure DevOps ko Azure Subscription me authentication dene ke liye Service Connection setup karein:
 
-```bash
-az ad sp create-for-rbac --name "github-actions-terraform" --role "Contributor" --scopes "/subscriptions/YOUR_AZURE_SUBSCRIPTION_ID" --sdk-auth
-```
-
-Is command ke output se aapko JSON output milega jisme ye 4 details hongi:
-- `clientId`
-- `clientSecret`
-- `subscriptionId`
-- `tenantId`
+1. Azure DevOps project me jaakar **Project Settings** (bottom left) par click karein.
+2. **Service connections** -> **New service connection** select karein.
+3. **Azure Resource Manager** select karke **Service Principal (automatic)** ya **Workload Identity federation** option chunein.
+4. Subscription select karke Service Connection ka naam `azure-service-connection` rakhein.
+5. Save karein aur pipeline permissions grant karein.
 
 ---
 
-### 3️⃣ GitHub Secrets Add Karein
-Aapne GitHub Repository par jaayein:
-**Settings -> Secrets and variables -> Actions -> New repository secret**
+### 3️⃣ Azure DevOps Pipeline Configure Karein
 
-Neeche diye gaye 4 secrets add karein:
-
-| Secret Name | Description |
-| :--- | :--- |
-| `AZURE_CLIENT_ID` | Service Principal ka Application (client) ID |
-| `AZURE_CLIENT_SECRET` | Service Principal ka Secret value |
-| `AZURE_SUBSCRIPTION_ID` | Aapki Azure Subscription ID |
-| `AZURE_TENANT_ID` | Aapki Azure Directory (tenant) ID |
+1. Azure DevOps me **Pipelines** -> **New pipeline** par click karein.
+2. Code location: **Azure Repos Git** / **GitHub**.
+3. Existing Azure Pipelines YAML file select karein: `azure-pipelines.yml`.
+4. Run par click karein.
 
 ---
 
 ### 4️⃣ Pull Request & Code Review Workflow
 
-Pipeline ko 2 parts me split kiya gaya hai taaki Code Review compulsory ho:
+Pipeline ko 2 Stages me divide kiya gaya hai:
 
-#### 🟢 Phase 1: PR Raise ya Update Hone Par (`terraform-plan`)
-1. Developer a-new branch create karke changes push karta hai aur `main` branch me **Pull Request (PR)** raise karta hai.
-2. Pipeline automatic run hakar:
-   - `terraform fmt -check` (Format check)
-   - `terraform init` (Backend setup)
-   - `terraform validate` (Syntax check)
-   - `terraform plan` (Azure changes check)
-3. Pipeline automatic PR par **Terraform Plan Result** post kar deti hai code review ke liye.
+#### 🟢 Stage 1: Validate & Plan (PR & Branch Push)
+- `terraform fmt -check` (Format check)
+- `terraform init` (Remote Backend initialization)
+- `terraform validate` (Syntax validation)
+- `terraform plan` (Execution plan generation)
 
-#### 🔴 Phase 2: PR Approve & Merge Hone Par (`terraform-apply`)
-1. Reviewer PR ke status aur Plan output ko review karke **Approve** karta hai.
-2. Merge to `main` hone par `terraform-apply` job chalta hai aur Azure par resources actually create/update ho jaate hain.
-
----
-
-### 🛡️ Mandatory PR Review Enforcement (GitHub Branch Protection Rules)
-Kaunibhi developer bina review ke directly `main` par push na kare, iske liye GitHub me Settings configure karein:
-
-1. Apni GitHub Repository me jaakar **Settings** tab par click karein.
-2. Left menu me **Branches** par click karein aur **Add branch protection rule** par click karein.
-3. **Branch name pattern**: `main` likhein.
-4. Neeche diye options check karein:
-   - ✅ **Require a pull request before merging**
-   - ✅ **Require approvals** (Minimum 1 approval set karein)
-   - ✅ **Require status checks to pass before merging** (`Terraform Plan & Code Review (PR)` select karein)
-5. **Save changes** par click karein.
-
+#### 🔴 Stage 2: Apply (Post Merge to `main`)
+- `main` branch me PR approve hokar merge hone par automatic `terraform apply -auto-approve` chalega.
