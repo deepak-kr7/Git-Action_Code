@@ -12,7 +12,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -90,12 +90,28 @@ jobs:
           echo "===================================="
           terraform plan -no-color
 
+      - name: Create Automatic Pull Request
+        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref_name }}
+          base: main
+          title: "Automated PR: Merge ${{ github.ref_name }} into main"
+          body: |
+            ## 🚀 Automated Pull Request
+            This PR was automatically raised by GitHub Actions after `terraform plan` succeeded on `${{ github.ref_name }}`.
+
+            ### Next Action:
+            - Review the changes.
+            - Click **Merge pull request** to trigger `terraform apply` on `main`.
+
       - name: PR Merge Instructions Notice
         if: github.event_name == 'push' && github.ref != 'refs/heads/main'
         run: |
           echo "=================================================================="
           echo " ✅ Terraform Plan completed successfully on branch: ${{ github.ref_name }}"
-          echo " 📌 Next Step: Open a Pull Request (PR) from '${{ github.ref_name }}' into 'main'."
+          echo " 📌 Automatic PR has been created/updated for '${{ github.ref_name }}' into 'main'."
           echo " 🚀 Merge PR to trigger 'Terraform Apply' automatically on main."
           echo "=================================================================="
 
