@@ -17,10 +17,10 @@ permissions:
 
 jobs:
   # ============================================================================
-  # STAGE 1: Terraform Format, Init, Validate, and Plan
+  # STAGE 1 & 2: Terraform Plan, Validate, and Open Pull Request
   # ============================================================================
-  terraform-plan:
-    name: "Stage 1: Terraform Plan (Validation & Preview)"
+  terraform-plan-and-pr:
+    name: "Stage 1 & 2: Terraform Plan & Create PR"
     runs-on: [self-hosted, macOS]
 
     defaults:
@@ -86,25 +86,8 @@ jobs:
           echo "===================================="
           terraform plan -no-color
 
-  # ============================================================================
-  # STAGE 2: Create Open Pull Request for Manual Review
-  # ============================================================================
-  create-pr:
-    name: "Stage 2: Open Pull Request for Review"
-    needs: terraform-plan
-    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
-    runs-on: [self-hosted, macOS]
-
-    defaults:
-      run:
-        shell: bash --noprofile --norc -e -o pipefail "{0}"
-        working-directory: .
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Create Automatic Pull Request
+        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -120,6 +103,7 @@ jobs:
             2. Approve & Click **Merge pull request** to trigger **Stage 3 (Terraform Apply)** on `main`.
 
       - name: PR Notice for User
+        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
         run: |
           echo "=================================================================="
           echo " ✅ Stage 1 (Terraform Plan) Passed!"
@@ -133,7 +117,7 @@ jobs:
   # ============================================================================
   terraform-apply:
     name: "Stage 3: Terraform Apply (Main Branch Post-Merge)"
-    needs: terraform-plan
+    needs: terraform-plan-and-pr
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, macOS]
 
