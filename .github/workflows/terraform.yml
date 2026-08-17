@@ -29,8 +29,14 @@ jobs:
         working-directory: .
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout Repository (Native Git)
+        run: |
+          echo "===================================="
+          echo " Checkout Repository (Native Git)"
+          echo "===================================="
+          git fetch origin
+          git checkout ${{ github.ref_name }}
+          git pull origin ${{ github.ref_name }}
 
       - name: Check Environment & Tools
         run: |
@@ -88,19 +94,39 @@ jobs:
 
       - name: Create Automatic Pull Request
         if: github.event_name == 'push' && github.ref != 'refs/heads/main'
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ github.ref_name }}
-          base: main
-          title: "Automated PR: Merge ${{ github.ref_name }} into main"
-          body: |
-            ## 🚀 Stage 2: Pull Request for Manual Review
-            `Stage 1 (Terraform Plan)` succeeded on `${{ github.ref_name }}`.
-
-            ### 📋 Action Required by Reviewer:
-            1. Review the Terraform Plan output above.
-            2. Approve & Click **Merge pull request** to trigger **Stage 3 (Terraform Apply)** on `main`.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          REPO_NAME: ${{ github.repository }}
+        run: |
+          echo "===================================="
+          echo " Stage 2: Create Pull Request via GitHub API"
+          echo "===================================="
+          PR_PAYLOAD=$(cat <<EOF
+          {
+            "title": "Automated PR: Merge ${BRANCH_NAME} into main",
+            "head": "${BRANCH_NAME}",
+            "base": "main",
+            "body": "## 🚀 Stage 2: Pull Request for Manual Review\n\`Stage 1 (Terraform Plan)\` succeeded on \`${BRANCH_NAME}\`.\n\n### 📋 Action Required by Reviewer:\n1. Review the Terraform Plan output above.\n2. Approve & Click **Merge pull request** to trigger **Stage 3 (Terraform Apply)** on \`main\`."
+          }
+          EOF
+          )
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Authorization: token ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${REPO_NAME}/pulls \
+            -d "${PR_PAYLOAD}")
+          
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          if [ "$HTTP_STATUS" -eq 201 ]; then
+            echo " ✅ Pull Request successfully created!"
+          elif [ "$HTTP_STATUS" -eq 422 ]; then
+            echo " ℹ️ Pull Request already open for branch '${BRANCH_NAME}'."
+          else
+            echo " ⚠️ API returned status ${HTTP_STATUS}: ${BODY}"
+          fi
 
       - name: PR Notice for User
         if: github.event_name == 'push' && github.ref != 'refs/heads/main'
@@ -127,8 +153,14 @@ jobs:
         working-directory: .
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout Repository (Native Git)
+        run: |
+          echo "===================================="
+          echo " Checkout Repository (Native Git)"
+          echo "===================================="
+          git fetch origin
+          git checkout ${{ github.ref_name }}
+          git pull origin ${{ github.ref_name }}
 
       - name: Terraform Init
         run: |
